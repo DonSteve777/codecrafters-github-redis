@@ -1,12 +1,15 @@
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import static java.lang.System.out;
 
 /**
  * Clase responsable de parsear archivos RDB de Redis
+ * https://rdb.fnordig.de/file_format.html#value-type
  * 
 ----------------------------#
 52 45 44 49 53              # Magic String "REDIS"
@@ -55,20 +58,53 @@ public class RDBParser {
     public static Map<String, String> parseRDB(String dir, String dbfilename) throws IOException {
         Map<String, String> redisData = new HashMap<>();
         byte[] data = Files.readAllBytes(Paths.get(dir + "/" + dbfilename));
-        
+        out.println("dentro");
         // MAL!!! funciona solamente para una db en el dbredisfile
-        for (int i = 0; i < data.length; i++) {
-            int val = data[i] & 0xFF;
-            if (val == 0xFE) {
-                RDBEntry entry = parseRDBEntry(data, i);
-                if (entry != null) {
-                    redisData.put(entry.key, entry.value);
-                    // Por ahora solo procesamos una clave
+        int i = 0;
+        int val = 0;
+        while(i < data.length && val != 0xFE ){
+            val = data[i] & 0xFF;
+            i++;
+        }
+        i--;    // vuelvo a 0XFE, por no cambiar el codigo siguiente, que  no tiene en cuneta el i++
+        out.println("0xFE encontrado. ");
+        if (i < data.length){
+            // DB start
+            int dbIndex = data[i + 1] & 0xFF; // no utilizado por ahora
+            int FB = data[i + 2] & 0xFF; // no utilizado por ahora
+            int tableSize = data[i + 3] & 0xFF;
+            int expTableSize = data[i + 4] & 0xFF; // no utilizado por ahora
+            // System.out.println("db selector " + Integer.toHexString(dbIndex));
+            // System.out.println( Integer.toHexString(FB));
+            // System.out.println(Integer.toHexString(tableSize));
+            // System.out.println(Integer.toHexString(expTableSize));
+            out.println("cabecera descartada. ");
+            /// entries
+            val = 0;
+            i+=5;
+            // leo entradas hasta el flag de final de db 0xFE 
+            while(i < data.length && val != 0xFE ){
+                val = data[i] & 0xFF;
+                i++;
+                RdbOpCode op = RdbOpCode.fromByte(val); 
+                if ( op != null){
+                    System.out.println("expery time encontrado en RDFile");
+                    System.out.println(Integer.toHexString(op.getCode())); 
                     break;
+                }else{
+                    System.out.println("value-type leido.");
+                    // int valueType = firtsEntryByte;
+                    RDBEntry entry = parseRDBEntry(data, i);
+                    if (entry != null) {
+                        redisData.put(entry.key, entry.value);
+                        i = entry.currentByte;
+                    }
                 }
             }
         }
-        
+        // podria leer aqui los resize y hacer esto para inicializar el map :
+        // redisData = new HashMap<>(resize);
+        // read DB
         return redisData;
     }
     
@@ -78,27 +114,32 @@ public class RDBParser {
     private static RDBEntry parseRDBEntry(byte[] data, int startIndex) {
         try {
             int i = startIndex;
-            // int dbIndex = data[i + 1] & 0xFF; // no utilizado por ahora
-            // int FB = data[i + 2] & 0xFF; // no utilizado por ahora
-            int tableSize = data[i + 3] & 0xFF;
-            // int expTableSize = data[i + 4] & 0xFF; // no utilizado por ahora
-            // int valueType = data[i + 5] & 0xFF; // no utilizado por ahora
-            
-            int keyLength = data[i + 6] & 0xFF;
-            byte[] subKey = Arrays.copyOfRange(data, i + 7, i + 7 + keyLength);
+            int keyLength = data[i] & 0xFF;
+            out.println("keyLength " + keyLength);
+            i++;
+            byte[] subKey = Arrays.copyOfRange(data, i , i + keyLength);
+            i+= keyLength;
             String key = new String(subKey, "UTF-8");
+            out.println("key " + key);
             
-            int valueLength = data[i + 7 + keyLength] & 0xFF;
-            byte[] subValue = Arrays.copyOfRange(data, i + 7 + keyLength + 1, 
-                                                i + 7 + keyLength + 1 + valueLength);
+            int valueLength = data[i] & 0xFF;
+            out.println("valueLength " + valueLength);
+            i++;
+            byte[] subValue = Arrays.copyOfRange(data, i, 
+            i + valueLength);
             String value = new String(subValue, "UTF-8");
+            out.println("value " + value);
             
-            return new RDBEntry(key, value, tableSize);
+            return new RDBEntry(key, value, i + valueLength );
+
         } catch (Exception e) {
             System.err.println("Error parseando entrada RDB: " + e.getMessage());
             return null;
         }
     }
+
+
+
     
     /**
      * Clase interna para representar una entrada del RDB
@@ -106,12 +147,12 @@ public class RDBParser {
     static class RDBEntry {
         final String key;
         final String value;
-        final int tableSize;
+        final int currentByte;
         
-        RDBEntry(String key, String value, int tableSize) {
+        RDBEntry(String key, String value, int currentByte ) {
             this.key = key;
             this.value = value;
-            this.tableSize = tableSize;
+            this.currentByte = currentByte;
         }
     }
 }
