@@ -1,9 +1,9 @@
 public enum RdbOpCode {
-    EXPIRETIME_SECONDS(0xF9),
-    EXPIRETIME_MS(0xFA),
-    FREQUENCY(0xF7),
-    RESIZEDB(0xFB),
-    EOF(0xFF);
+    EXPIRETIME_SECONDS(0xFD),
+    EXPIRETIME_MS(0xFC);
+    // FREQUENCY(0xF7),
+    // RESIZEDB(0xFB),
+    // EOF(0xFF);
 
     private final int code;
 

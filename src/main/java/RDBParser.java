@@ -1,10 +1,15 @@
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
 import static java.lang.System.out;
 
 /**
@@ -61,9 +66,9 @@ public class RDBParser {
         out.println("dentro");
         // MAL!!! funciona solamente para una db en el dbredisfile
         int i = 0;
-        int val = 0;
-        while(i < data.length && val != 0xFE ){
-            val = data[i] & 0xFF;
+        int tmp = 0;
+        while(i < data.length && tmp != 0xFE ){
+            tmp = data[i] & 0xFF;
             i++;
         }
         i--;    // vuelvo a 0XFE, por no cambiar el codigo siguiente, que  no tiene en cuneta el i++
@@ -80,25 +85,67 @@ public class RDBParser {
             // System.out.println(Integer.toHexString(expTableSize));
             out.println("cabecera descartada. ");
             /// entries
-            val = 0;
+            tmp = 0;
             i+=5;
             // leo entradas hasta el flag de final de db 0xFE 
-            while(i < data.length && val != 0xFE ){
-                val = data[i] & 0xFF;
-                i++;
-                RdbOpCode op = RdbOpCode.fromByte(val); 
+            while(i < data.length && tmp != 0xFE ){
+                tmp = data[i] & 0xFF;
+                out.println("tmp " + Integer.toHexString(tmp));
+
+                RdbOpCode op = RdbOpCode.fromByte(tmp); 
+                long expireTimeMilis = 0;
+                long delay = 0;
+                ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
                 if ( op != null){
-                    System.out.println("expery time encontrado en RDFile");
-                    System.out.println(Integer.toHexString(op.getCode())); 
-                    break;
-                }else{
-                    System.out.println("value-type leido.");
-                    // int valueType = firtsEntryByte;
-                    RDBEntry entry = parseRDBEntry(data, i);
-                    if (entry != null) {
-                        redisData.put(entry.key, entry.value);
-                        i = entry.currentByte;
+                    System.out.println("expery time encontrado: " + Integer.toHexString(op.getCode()));
+                    i++;    // FD/FC
+                    if (op.getCode() == RdbOpCode.EXPIRETIME_SECONDS.getCode()){
+                        // unsigned int , ocupa 4 bytes = 32 bits
+                        // no hay unsigned int en java, usamos long : (0XFFL) -> 64 bits (necesito 32 para el unsigned int, pero con int solo puedo usar 31 bits)
+                        // 0XFFL -> 11111111L -> 11111111111111111111111111111111L
+                        // OJO: little endian
+                       long tmpUnsignedInt = 0L;
+                       tmpUnsignedInt = ((data[i] & 0xFFL)) |
+                            ((data[i+1] & 0xFFL) << 8) |
+                            ((data[i+2] & 0xFFL) << 16) |
+                            ((data[i+3] & 0xFFL) << 24);
+                        expireTimeMilis = tmpUnsignedInt * 1000;
+                        i += 4;
                     }
+                    else if (op.getCode() == RdbOpCode.EXPIRETIME_MS.getCode()){
+                        // 8 byte unsigned long
+                        byte[] expireTimeBytes = new byte[9];
+                        byte[] tmpBytes = Arrays.copyOfRange(data, i, i + 8);
+                        // invierto el orden de los bytes porque BigInteger es big  endian
+                        long expiry = 0L;
+                        for (int j = 0; j < 8; j++) {
+                            expiry |= (tmpBytes[j] & 0xFFL) << (8 * j);
+                        }
+                        expireTimeMilis = expiry;
+                        i += 8;
+                    }
+                    delay = expireTimeMilis - System.currentTimeMillis();
+                    out.println("expire in  " + delay);
+                }
+
+                int valueType = data[i] & 0xFF;
+                i++;
+                RDBEntry entry = parseRDBEntry(data, i);
+
+
+                if (entry != null) {
+                    redisData.put(entry.key, entry.value);
+                    if (delay > 0 ) {
+                    scheduler.schedule(
+                        () -> redisData.remove(entry.key),
+                            delay, 
+                            TimeUnit.MILLISECONDS
+                        );
+                    }else if (delay <= 0 && op != null ){
+                        redisData.remove(entry.key);
+                    }
+
+                    i = entry.currentByte;
                 }
             }
         }
