@@ -5,6 +5,8 @@ public class CommandLineArgs {
     
     private String dir;
     private String dbfilename;
+    private static final int DEFAULT_PORT = 6379;
+    private int port = DEFAULT_PORT;
     
     public CommandLineArgs(String[] args) {
         parseArgs(args);
@@ -15,7 +17,7 @@ public class CommandLineArgs {
      * Formato esperado: --dir <directorio> --dbfilename <archivo>
      */
     private void parseArgs(String[] args) {
-        if (args.length >= 4) {
+       // if (args.length >= 4) {
             for (int i = 0; i < args.length - 1; i++) {
                 switch (args[i]) {
                     case "--dir":
@@ -24,9 +26,12 @@ public class CommandLineArgs {
                     case "--dbfilename":
                         this.dbfilename = args[i + 1];
                         break;
+                    case "--port":
+                        this.port = Integer.parseInt(args[i + 1]);
+                        break;
                 }
             }
-        }
+       // }
     }
     
     /**
@@ -42,6 +47,10 @@ public class CommandLineArgs {
     
     public String getDbfilename() {
         return dbfilename;
+    }
+
+    public int getPort() {
+        return port;
     }
     
     @Override

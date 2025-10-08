@@ -12,7 +12,7 @@ public class Main {
     CommandLineArgs cmdArgs = new CommandLineArgs(args);
     
     // Crear e iniciar el servidor Redis
-    RedisServer server = new RedisServer(cmdArgs.getDir(), cmdArgs.getDbfilename());
+    RedisServer server = new RedisServer(cmdArgs.getDir(), cmdArgs.getDbfilename(), cmdArgs.getPort());
     server.start();
   }
 }

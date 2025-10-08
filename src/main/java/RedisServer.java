@@ -17,13 +17,16 @@ public class RedisServer {
     private final AtomicBoolean running = new AtomicBoolean(true);
     private final RedisCommands redisCommands;
     private final Map<String, RedisCommand> commandMap;
-    
-    public RedisServer(String dir, String dbfilename) {
+    private final int port;
+
+
+    public RedisServer(String dir, String dbfilename, int port) {
         this.redisCommands = new RedisCommands(dir, dbfilename);
         this.commandMap = createCommandMap();
         
         // Cargar datos del archivo RDB si existe
         loadInitialData(dir, dbfilename);
+        this.port = port;
     }
     
     /**
@@ -82,7 +85,7 @@ public class RedisServer {
      * Inicia el servidor en el puerto por defecto
      */
     public void start() {
-        start(DEFAULT_PORT);
+        start(port);
     }
     
     /**

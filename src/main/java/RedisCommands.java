@@ -118,9 +118,12 @@ public class RedisCommands {
      */
     private void handleExpiration(String[] args) {
         System.out.println("xxx SET con EX");
+
+        // junta en un string todos los elementos del array args
+        String argsString = String.join(" ", args);
         
-        if (!args[3].equals("px")) {
-            throw new IllegalArgumentException("Argumento inválido");
+        if (!args[3].equalsIgnoreCase("px")) {
+            throw new IllegalArgumentException("Argumento inválido: " + args[3] + " - " + argsString);
         }
         
         long expirationTime = Long.parseLong(args[4]);
